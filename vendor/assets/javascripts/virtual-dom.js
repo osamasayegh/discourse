@@ -502,8 +502,10 @@ function applyPatch(vpatch, domNode, renderOptions) {
     switch (type) {
         case VPatch.REMOVE:
             return removeNode(domNode, vNode)
+        case VPatch.PREPEND:
+            return prependNode(domNode, patch, renderOptions, vpatch.position)
         case VPatch.INSERT:
-            return insertNode(domNode, patch, renderOptions)
+            return insertNode(domNode, patch, renderOptions, vpatch.args)
         case VPatch.VTEXT:
             return stringPatch(domNode, vNode, patch, renderOptions)
         case VPatch.WIDGET:
@@ -534,6 +536,16 @@ function removeNode(domNode, vNode) {
     destroyWidget(domNode, vNode);
 
     return null
+}
+
+function prependNode(parentNode, vNode, renderOptions, position) {
+    var newNode = renderOptions.render(vNode, renderOptions)
+
+    if (parentNode && typeof position === "number") {
+      parentNode.insertBefore(newNode, parentNode.children[position])
+    }
+
+    return parentNode
 }
 
 function insertNode(parentNode, vNode, renderOptions) {
@@ -610,6 +622,46 @@ function reorderChildren(domNode, moves) {
     var node
     var remove
     var insert
+    //var both = []
+    //for (var i = 0; i < moves.removes.length; i++) {
+    //  var sdf = moves.removes[i]
+    //  keyMap[sdf.key] = childNodes[sdf.from + i]
+    //  for (var y = 0; y < moves.inserts.length; y++) {
+    //    if (sdf.key && sdf.key === moves.inserts[y].key) {
+    //      both[both.length] = sdf.key
+    //      break
+    //    }
+    //  }
+    //}
+    //
+    //if (both.length === moves.removes.length && both.length === moves.inserts.length) {
+    //  var notToBeRemoved = []
+    //  for (var i = 0; i < ) {
+    //    
+    //  }
+    //  Object.entries(keyMap).forEach((key, value) => {
+    //    
+    //  })
+    //  for (var i = 0; i < moves.inserts.length; i++) {
+    //    var current = moves.inserts[i]
+    //    var shouldMove = true
+    //    var target = keyMap[current.key]
+    //    for (var y = 0; y < childNodes.length; y++) {
+    //      if (current.to === y && target === childNodes[y]) {
+    //        if (Array.from(childNodes[y].classList).includes("time-gap")) {
+    //          debugger;
+    //        }
+    //        shouldMove = false
+    //        break
+    //      }
+    //    }
+    //    if (shouldMove) {
+    //      
+    //      domNode.insertBefore(target, childNodes[current.to])
+    //    }
+    //  }
+    //  return;
+    //}
 
     for (var i = 0; i < moves.removes.length; i++) {
         remove = moves.removes[i]
@@ -1151,13 +1203,15 @@ VirtualPatch.ORDER = 5
 VirtualPatch.INSERT = 6
 VirtualPatch.REMOVE = 7
 VirtualPatch.THUNK = 8
+VirtualPatch.PREPEND = 9
 
 module.exports = VirtualPatch
 
-function VirtualPatch(type, vNode, patch) {
+function VirtualPatch(type, vNode, patch, position) {
     this.type = Number(type)
     this.vNode = vNode
     this.patch = patch
+    this.position = position
 }
 
 VirtualPatch.prototype.version = version
@@ -1324,6 +1378,34 @@ function diffChildren(a, b, patch, apply, index) {
     var orderedSet = reorder(aChildren, b.children)
     var bChildren = orderedSet.children
 
+    if (b.properties && b.properties.className === "post-stream" && aChildren.length < b.children.length) {
+      var customApply = undefined
+      var newChildren = b.children.slice()
+      var bChildrenKeys = []
+      for (var i = 0; i < aChildren.length; i++) {
+        for (var y = 0; y < newChildren.length; y++) {
+          if (newChildren[y].key === aChildren[i].key) {
+            bChildrenKeys.push(newChildren[y].key)
+            newChildren.splice(y, 1)
+            break
+          }
+        }
+      }
+      for (var i = 0; i < newChildren.length; i++) {
+        var position = 0
+        for (var j = 0; j < b.children.length; j++) {
+          if (newChildren[i].key === b.children[j].key) {
+            customApply = appendPatch(customApply, new VPatch(VPatch.PREPEND, null, newChildren[i], position))
+            break
+          } else {
+            position++
+          }
+        }
+      }
+      if (newChildren.length > 0 && customApply) {
+        return customApply
+      }
+    }
     var aLen = aChildren.length
     var bLen = bChildren.length
     var len = aLen > bLen ? aLen : bLen
@@ -1397,6 +1479,9 @@ function destroyWidgets(vNode, patch, index) {
 // Create a sub-patch for thunks
 function thunks(a, b, patch, index) {
     var nodes = handleThunk(a, b)
+    if (!a.vnode) {
+      debugger;
+    }
     var thunkPatch = diff(nodes.a, nodes.b)
     if (hasPatches(thunkPatch)) {
         patch[index] = new VPatch(VPatch.THUNK, null, thunkPatch)
