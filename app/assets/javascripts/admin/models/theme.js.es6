@@ -130,32 +130,44 @@ const Theme = RestModel.extend({
     }
   },
 
-  @computed("childThemes.@each")
-  child_theme_ids(childThemes) {
-    if (childThemes) {
-      return childThemes.map(theme => Ember.get(theme, "id"));
-    }
+  @computed("selectableComponents.@each", "activeComponents.@each")
+  child_theme_ids(selectable, active) {
+    const arr = []
+    selectable.forEach(t => arr.push({ id: t.get("id"), selectable: true }));
+    active.forEach(t => arr.push({ id: t.get("id"), selectable: false }));
+    return arr;
   },
 
-  removeChildTheme(theme) {
-    const childThemes = this.get("childThemes");
-    childThemes.removeObject(theme);
-    return this.saveChanges("child_theme_ids");
+  @computed("selectableComponents", "activeComponents")
+  allComponents(selectable, active) {
+    return _.sortBy([...selectable, ...active], t => t.get("name").toLowerCase());
   },
 
-  addChildTheme(theme) {
-    let childThemes = this.get("childThemes");
+  removeComponent(component, selectable) {
+    const list = selectable ? this.get("selectableComponents") : this.get("activeComponents");
+    list.removeObject(component)
+    const index = this.get("child_themes").findIndex(c => c.id === component.get("id"));
+    this.get("child_themes").splice(index, 1);
+    //return this.saveChanges("child_theme_ids");
+  },
+
+  addComponent(component, selectable) {
+    const list = selectable ? this.get("selectableComponents") : this.get("activeComponents");
+    list.removeObject(component)
+    list.pushObject(component)
+    this.get("child_themes").push({ id: component.get("id"), name: component.get("name"), selectable });
+    /*let childThemes = this.get("childThemes");
     if (!childThemes) {
       childThemes = [];
       this.set("childThemes", childThemes);
     }
     childThemes.removeObject(theme);
     childThemes.pushObject(theme);
-    return this.saveChanges("child_theme_ids");
+    return this.saveChanges("child_theme_ids");*/
   },
 
   @computed("name", "default")
-  description: function(name, isDefault) {
+  description(name, isDefault) {
     if (isDefault) {
       return I18n.t("admin.customize.theme.default_name", { name: name });
     } else {

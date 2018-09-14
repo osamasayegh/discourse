@@ -6,6 +6,7 @@ import {
 } from "ember-addons/ember-computed-decorators";
 import {
   currentThemeId,
+  currentThemeIds,
   listThemes,
   previewTheme,
   setLocalTheme
@@ -21,6 +22,8 @@ const USER_HOMES = {
 };
 
 export default Ember.Controller.extend(PreferencesTabController, {
+  hasComponents: Em.computed.gt("availableComponents.length", 0),
+
   @computed("makeThemeDefault")
   saveAttrNames(makeDefault) {
     let attrs = [
@@ -54,9 +57,36 @@ export default Ember.Controller.extend(PreferencesTabController, {
     return currentThemeId();
   },
 
-  userSelectableThemes: function() {
+  @computed()
+  userSelectableThemes() {
     return listThemes(this.site);
-  }.property(),
+  },
+
+  @computed("themeId")
+  availableComponents(parentId) {
+    if (!parentId) {
+      return [];
+    }
+    return this.get("userComponents").filter(component => component.get("parent_id") === parentId);
+  },
+
+  @computed()
+  userComponents() {
+    return this.get("site.user_components").map(component => {
+      const current = currentThemeIds();
+      const checked = current.includes(component.id) && current[0] === component.parent_id
+      return Em.Object.create({ checked }, component)
+    });
+  },
+
+  @computed("themeId", "availableComponents", "availableComponents.@each.checked")
+  selectedThemeIds(parent, components) {
+    if (!parent) {
+      return [];
+    }
+    const componentsIds = components.filter(component => component.get("checked")).map(component => component.get("id"));
+    return [parent, ...componentsIds];
+  },
 
   @computed("userSelectableThemes")
   showThemeSelector(themes) {
@@ -66,7 +96,7 @@ export default Ember.Controller.extend(PreferencesTabController, {
   @observes("themeId")
   themeIdChanged() {
     const id = this.get("themeId");
-    previewTheme([id]);
+    //previewTheme([id]);
   },
 
   homeChanged() {
@@ -95,7 +125,7 @@ export default Ember.Controller.extend(PreferencesTabController, {
       this.set("saved", false);
       const makeThemeDefault = this.get("makeThemeDefault");
       if (makeThemeDefault) {
-        this.set("model.user_option.theme_ids", [this.get("themeId")]);
+        this.set("model.user_option.theme_ids", this.get("selectedThemeIds"));
       }
 
       return this.get("model")
@@ -105,7 +135,7 @@ export default Ember.Controller.extend(PreferencesTabController, {
 
           if (!makeThemeDefault) {
             setLocalTheme(
-              [this.get("themeId")],
+              this.get("selectedThemeIds"),
               this.get("model.user_option.theme_key_seq")
             );
           }

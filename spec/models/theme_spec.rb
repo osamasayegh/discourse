@@ -63,13 +63,52 @@ describe Theme do
     parent.add_child_theme!(child)
 
     expect(Theme.lookup_field(parent.id, :mobile, "header")).to eq("Common Parent\nMobile Parent\nWorldie\nMobile")
-
   end
 
   it 'can correctly find parent themes' do
     theme.add_child_theme!(child)
-
     expect(child.dependant_themes.length).to eq(1)
+  end
+
+
+  context "user-selectable components" do
+    it "selectable components are not dependant on their parent" do
+      theme.add_child_theme!(child, selectable: true)
+      expect(child.dependant_themes.length).to eq(0)
+    end
+
+    it "HTML/JS/CSS are not implicitly included with parent theme HTML/JS/CSS" do
+      child.set_field(target: :common, name: "header", value: "World")
+      child.set_field(target: :desktop, name: "header", value: "Desktop")
+      child.set_field(target: :mobile, name: "header", value: "Mobile")
+      child.save!
+
+      theme.set_field(target: :common, name: "header", value: "Common Parent")
+      theme.set_field(target: :mobile, name: "header", value: "Mobile Parent")
+      theme.save!
+      theme.add_child_theme!(child, selectable: true)
+
+      expect(Theme.lookup_field(theme.id, :mobile, "header")).to eq("Common Parent\nMobile Parent")
+
+      expect(Theme.lookup_field([theme.id, child.id], :mobile, "header")).to eq("Common Parent\nMobile Parent\nWorld\nMobile")
+      expect(Theme.lookup_field([theme.id, child.id], :desktop, "header")).to eq("Common Parent\nWorld\nDesktop")
+    end
+  end
+
+  context "#change_child_type!" do
+    it "changes a parent's component from selectable to active and vice versa" do
+      theme.add_child_theme!(child)
+      record = theme.child_theme_relation.find_by(child_theme: child)
+      expect(record.user_selectable).to eq(false)
+
+      theme.change_child_type!(record, selectable: false)
+      record.reload
+      expect(record.user_selectable).to eq(false) # doesn't toggle
+
+      theme.change_child_type!(record, selectable: true)
+      record.reload
+      expect(record.user_selectable).to eq(true)
+    end
   end
 
   it "doesn't allow multi-level theme components" do
@@ -183,6 +222,8 @@ HTML
   describe ".transform_ids" do
     let!(:child) { Fabricate(:theme, component: true) }
     let!(:child2) { Fabricate(:theme, component: true) }
+    let(:child3) { Fabricate(:theme, component: true) }
+    let(:sorted) { [child.id, child2.id].sort }
 
     before do
       theme.add_child_theme!(child)
@@ -190,8 +231,6 @@ HTML
     end
 
     it "adds the child themes of the parent" do
-      sorted = [child.id, child2.id].sort
-
       expect(Theme.transform_ids([theme.id])).to eq([theme.id, *sorted])
 
       fake_id = [child.id, child2.id, theme.id].min - 5
@@ -209,6 +248,11 @@ HTML
       expect(Theme.transform_ids([theme.id], extend: false)).to eq([theme.id])
       expect(Theme.transform_ids([theme.id, fake_id3, fake_id, fake_id2, fake_id2], extend: false))
         .to eq([theme.id, fake_id, fake_id2, fake_id3])
+    end
+
+    it "doesn't add selectable children ids" do
+      theme.add_child_theme!(child3, selectable: true)
+      expect(Theme.transform_ids([theme.id])).to eq([theme.id, *sorted])
     end
   end
 

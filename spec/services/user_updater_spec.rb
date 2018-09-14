@@ -134,6 +134,10 @@ describe UserUpdater do
       user.user_option.update!(theme_ids: [1])
       updater = UserUpdater.new(acting_user, user)
 
+      updater.update(theme_ids: [])
+      user.reload
+      expect(user.user_option.theme_ids).to eq([])
+
       updater.update(theme_ids: [""])
       user.reload
       expect(user.user_option.theme_ids).to eq([])
@@ -141,15 +145,26 @@ describe UserUpdater do
       updater.update(theme_ids: [nil])
       user.reload
       expect(user.user_option.theme_ids).to eq([])
+    end
 
+    it "updates user themes preferences" do
+      user = Fabricate(:user)
+      updater = UserUpdater.new(acting_user, user)
       theme = Fabricate(:theme)
       child = Fabricate(:theme, component: true)
-      theme.add_child_theme!(child)
+      theme.add_child_theme!(child, selectable: true)
+      relation = theme.child_theme_relation.find_by(child_theme: child)
       theme.set_default!
 
       updater.update(theme_ids: [theme.id.to_s, child.id.to_s, "", nil])
       user.reload
       expect(user.user_option.theme_ids).to eq([theme.id, child.id])
+
+      updater.update(theme_ids: [])
+      theme.change_child_type!(relation, selectable: false)
+      updater.update(theme_ids: [theme.id, child.id])
+      user.reload
+      expect(user.user_option.theme_ids).to eq([theme.id])
     end
 
     context 'when sso overrides bio' do

@@ -170,12 +170,13 @@ describe Admin::ThemesController do
       theme.save
 
       child_theme = Fabricate(:theme, component: true)
+      child_theme2 = Fabricate(:theme, component: true)
 
       upload = Fabricate(:upload)
 
       put "/admin/themes/#{theme.id}.json", params: {
         theme: {
-          child_theme_ids: [child_theme.id],
+          child_theme_ids: [{ id: child_theme.id, selectable: true }, { id: child_theme2.id, selectable: false }],
           name: 'my test name',
           theme_fields: [
             { name: 'scss', target: 'common', value: '' },
@@ -195,7 +196,11 @@ describe Admin::ThemesController do
       expect(fields[0]["upload_id"]).to eq(upload.id)
       expect(fields[1]["value"]).to eq('body{color: blue;}')
       expect(fields.length).to eq(2)
-      expect(json["theme"]["child_themes"].length).to eq(1)
+      expect(json["theme"]["child_themes"].length).to eq(2)
+
+      expect(Theme.components_for(theme.id, selectable: true)).to eq([child_theme.id])
+      expect(Theme.components_for(theme.id, selectable: false)).to eq([child_theme2.id])
+
       expect(UserHistory.where(action: UserHistory.actions[:change_theme]).count).to eq(1)
     end
 

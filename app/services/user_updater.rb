@@ -90,11 +90,8 @@ class UserUpdater
       user_guardian = Guardian.new(user)
       attributes[:theme_ids].reject!(&:blank?)
       attributes[:theme_ids].map!(&:to_i)
-      if user_guardian.allow_themes?(attributes[:theme_ids])
-        user.user_option.theme_key_seq += 1 if user.user_option.theme_ids != attributes[:theme_ids]
-      else
-        attributes.delete(:theme_ids)
-      end
+      attributes[:theme_ids] = user_guardian.filter_unallowed_themes(attributes[:theme_ids])
+      user.user_option.theme_key_seq += 1 if user.user_option.theme_ids.sort != attributes[:theme_ids].sort
     end
 
     OPTION_ATTR.each do |attribute|

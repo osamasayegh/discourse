@@ -144,6 +144,27 @@
       margin-bottom: 10px;
     }
 
+    .components-block {
+      margin-top: 10px;
+      margin-bottom: 20px;
+    }
+    .components-body {
+      display: inline-block;
+      width: 80%;
+      .multi-select, .help {
+        width: 80%;
+      }
+      .help {
+        margin-top: 3px;
+        font-size: $font-down-1;
+        color: $primary-medium;
+      }
+    }
+    .components-label {
+      width: 18%;
+      display: inline-block;
+      vertical-align: top;
+    }
     .title {
       font-size: $font-up-4;
       font-weight: bold;

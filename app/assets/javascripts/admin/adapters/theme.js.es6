@@ -11,9 +11,21 @@ export default RestAdapter.extend({
       map[theme.id] = theme;
     });
     results.forEach(theme => {
-      let mapped = theme.get("child_themes") || [];
-      mapped = mapped.map(t => map[t.id]);
-      theme.set("childThemes", mapped);
+      const selectable = []
+      const active = []
+      const mapped = theme.get("child_themes") || [];
+      mapped.forEach(t => {
+        const child = map[t.id];
+        if (child) {
+          if (t.selectable) {
+            selectable.push(child);
+          } else {
+            active.push(child);
+          }
+        }
+      });
+      theme.set("selectableComponents", selectable);
+      theme.set("activeComponents", active);
     });
     return results;
   },

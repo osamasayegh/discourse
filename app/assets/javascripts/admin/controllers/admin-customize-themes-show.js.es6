@@ -1,4 +1,4 @@
-import { default as computed } from "ember-addons/ember-computed-decorators";
+import { default as computed, observes } from "ember-addons/ember-computed-decorators";
 import { url } from "discourse/lib/computed";
 import { popupAjaxError } from "discourse/lib/ajax-error";
 import showModal from "discourse/lib/show-modal";
@@ -18,7 +18,7 @@ export default Ember.Controller.extend({
       return null;
     }
     const parents = allThemes.filter(theme =>
-      _.contains(theme.get("childThemes"), model)
+      _.contains(theme.get("allComponents"), model)
     );
     return parents.length === 0 ? null : parents;
   },
@@ -47,24 +47,34 @@ export default Ember.Controller.extend({
     return colorSchemeId !== existingId;
   },
 
-  @computed("availableChildThemes", "model.childThemes.@each", "model")
-  selectableChildThemes(available, childThemes) {
-    if (available) {
-      const themes = !childThemes
-        ? available
-        : available.filter(theme => childThemes.indexOf(theme) === -1);
-      return themes.length === 0 ? null : themes;
+  @computed("allThemes", "model.component", "model.allComponents.[]", "model")
+  availableComponents(allThemes, component, allComponents) {
+    if (!component) {
+      const themeId = this.get("model.id");
+      return allThemes.filter(
+        theme => theme.get("component")
+      );
     }
   },
 
-  @computed("allThemes", "model.component", "model")
-  availableChildThemes(allThemes) {
-    if (!this.get("model.component")) {
-      const themeId = this.get("model.id");
-      return allThemes.filter(
-        theme => theme.get("id") !== themeId && theme.get("component")
-      );
-    }
+  @computed("availableComponents.[]", "model.selectableComponents.[]")
+  activeComponentsList(available, selectableList) {
+    return available.filter(theme => selectableList.indexOf(theme) === -1)
+  },
+
+  @computed("availableComponents.[]", "model.activeComponents.[]")
+  selectableComponentsList(available, activeList) {
+    return available.filter(theme => activeList.indexOf(theme) === -1)
+  },
+
+  @observes("model.activeComponents.[]", "activeComponentsList")
+  updateActiveComponentsIds() {
+    this.set("activeComponentsIds", this.get("model.activeComponents").map(t => t.get("id")))
+  },
+
+  @observes("model.selectableComponents.[]", "selectableComponentsList")
+  updateSelectableComponentsIds() {
+    this.set("selectableComponentsIds", this.get("model.selectableComponents").map(t => t.get("id")))
   },
 
   @computed("model.component")
@@ -126,11 +136,13 @@ export default Ember.Controller.extend({
           color_scheme_id: null,
           user_selectable: false,
           child_themes: [],
-          childThemes: []
+          selectableComponents: [],
+          activeComponents: []
         });
 
-        this.get("parentController.model.content").forEach(theme => {
-          const children = _.toArray(theme.get("childThemes"));
+        /*this.get("parentController.model.content").forEach(theme => {
+          const selectable = _.toArray(theme.get("selectableComponents"));
+          const active = _.toArray(theme.get("activeComponents"));
           const rawChildren = _.toArray(theme.get("child_themes") || []);
           const index = children ? children.indexOf(model) : -1;
           if (index > -1) {
@@ -141,7 +153,7 @@ export default Ember.Controller.extend({
               child_themes: rawChildren
             });
           }
-        });
+        });*/
       })
       .catch(popupAjaxError);
   },
@@ -280,10 +292,18 @@ export default Ember.Controller.extend({
       );
     },
 
+    addComponent(selectable, id) {
+      this.get("model").addComponent(this.get("allThemes").find(t => t.get("id") === id), selectable)
+    },
+
+    removeComponent(selectable, id) {
+      this.get("model").removeComponent(this.get("allThemes").find(t => t.get("id") === id), selectable)
+    },
+
     switchType() {
       const relatives = this.get("model.component")
         ? this.get("parentThemes")
-        : this.get("model.childThemes");
+        : this.get("model.allComponents");
       if (relatives && relatives.length > 0) {
         const names = relatives.map(relative => relative.get("name"));
         bootbox.confirm(

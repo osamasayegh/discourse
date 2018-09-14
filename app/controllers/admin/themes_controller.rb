@@ -143,18 +143,23 @@ class Admin::ThemesController < Admin::AdminController
     end
 
     if theme_params.key?(:child_theme_ids)
-      expected = theme_params[:child_theme_ids].map(&:to_i)
+      expected = {}
+      theme_params[:child_theme_ids].each do |hash|
+        expected[hash[:id].to_i] = [true, "true"].include?(hash[:selectable])
+      end
 
       @theme.child_theme_relation.to_a.each do |child|
-        if expected.include?(child.child_theme_id)
-          expected.reject! { |id| id == child.child_theme_id }
+        new_val = expected[child.child_theme_id]
+        unless new_val.nil?
+          @theme.change_child_type!(child, selectable: new_val)
+          expected.delete(child.child_theme_id)
         else
           child.destroy
         end
       end
 
-      Theme.where(id: expected).each do |theme|
-        @theme.add_child_theme!(theme)
+      Theme.where(id: expected.keys).each do |theme|
+        @theme.add_child_theme!(theme, selectable: expected[theme.id])
       end
     end
 
@@ -251,7 +256,7 @@ class Admin::ThemesController < Admin::AdminController
           :component,
           settings: {},
           theme_fields: [:name, :target, :value, :upload_id, :type_id],
-          child_theme_ids: []
+          child_theme_ids: [:id, :selectable]
         )
       end
   end

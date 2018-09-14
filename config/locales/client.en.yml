@@ -709,6 +709,7 @@ en:
       api_approved: "Approved:"
       api_last_used_at: "Last used at:"
       theme: "Theme"
+      components: "Theme components"
       home: "Default Home Page"
       staged: "Staged"
 
@@ -3238,6 +3239,8 @@ en:
           color_scheme_select: "Select colors to be used by theme"
           custom_sections: "Custom sections:"
           theme_components: "Theme Components"
+          active: "Active"
+          selectable: "User-selectable"
           convert: "Convert"
           convert_component_alert: "Are you sure you want to convert this component to theme? It will be removed as a component from %{relatives}."
           convert_component_tooltip: "Convert this component to theme"
