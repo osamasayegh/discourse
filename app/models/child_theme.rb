@@ -4,6 +4,10 @@ class ChildTheme < ActiveRecord::Base
 
   validate :child_validations
 
+  after_commit do
+    Theme.expire_site_cache!
+  end
+
   private
 
   def child_validations

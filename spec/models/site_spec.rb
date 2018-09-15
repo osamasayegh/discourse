@@ -16,9 +16,17 @@ describe Site do
     expect(parsed["user_themes"]).to eq(expected)
   end
 
+  def expect_correct_components(guardian, expected)
+    json = JSON.parse(Site.json_for(guardian)).deep_symbolize_keys
+    expected_hash = expected.map do |child, parent|
+      { id: child.id, name: child.name, parent_id: parent.id }
+    end
+    expect(json[:user_components]).to eq(expected_hash)
+  end
+
   it "includes user themes and expires them as needed" do
     default_theme = Fabricate(:theme)
-    SiteSetting.default_theme_id = default_theme.id
+    default_theme.set_default!
     user_theme = Fabricate(:theme, user_selectable: true)
 
     anon_guardian = Guardian.new
@@ -37,7 +45,48 @@ describe Site do
 
     expect_correct_themes(anon_guardian)
     expect_correct_themes(user_guardian)
+  end
 
+  it "includes user selectable components and expires them as needed" do
+    default_theme = Fabricate(:theme, name: "default")
+    user_theme = Fabricate(:theme, name: "user_theme")
+
+    child = Fabricate(:theme, component: true, name: "child")
+    child2 = Fabricate(:theme, component: true, name: "child2")
+
+    default_theme.add_child_theme!(child, selectable: true)
+    default_theme.add_child_theme!(child2)
+    user_theme.add_child_theme!(child, selectable: true)
+    user_theme.add_child_theme!(child2, selectable: true)
+
+    anon_guardian = Guardian.new
+    user_guardian = Guardian.new(Fabricate(:user))
+
+    expect_correct_components(anon_guardian, [])
+    expect_correct_components(user_guardian, [])
+
+    default_theme.set_default!
+    expect_correct_components(anon_guardian, [[child, default_theme]])
+    expect_correct_components(user_guardian, [[child, default_theme]])
+
+    user_theme.update!(user_selectable: true)
+    expect_correct_components(anon_guardian, [[child, default_theme], [child, user_theme], [child2, user_theme]])
+    expect_correct_components(user_guardian, [[child, default_theme], [child, user_theme], [child2, user_theme]])
+
+    record = default_theme.child_theme_relation.find_by(child_theme: child)
+    default_theme.change_child_type!(record, selectable: false)
+    expect_correct_components(anon_guardian, [[child, user_theme], [child2, user_theme]])
+    expect_correct_components(user_guardian, [[child, user_theme], [child2, user_theme]])
+
+    Theme.clear_default!
+
+    expect_correct_components(anon_guardian, [[child, user_theme], [child2, user_theme]])
+    expect_correct_components(user_guardian, [[child, user_theme], [child2, user_theme]])
+
+    user_theme.update!(user_selectable: false)
+
+    expect_correct_components(anon_guardian, [])
+    expect_correct_components(user_guardian, [])
   end
 
   it "omits categories users can not write to from the category list" do

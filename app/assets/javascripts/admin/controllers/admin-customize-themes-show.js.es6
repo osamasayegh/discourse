@@ -62,19 +62,29 @@ export default Ember.Controller.extend({
     return available.filter(theme => selectableList.indexOf(theme) === -1)
   },
 
-  @computed("availableComponents.[]", "model.activeComponents.[]")
-  selectableComponentsList(available, activeList) {
-    return available.filter(theme => activeList.indexOf(theme) === -1)
-  },
-
   @observes("model.activeComponents.[]", "activeComponentsList")
   updateActiveComponentsIds() {
     this.set("activeComponentsIds", this.get("model.activeComponents").map(t => t.get("id")))
   },
 
+
+  @computed("availableComponents.[]", "model.activeComponents.[]")
+  selectableComponentsList(available, activeList) {
+    return available.filter(theme => activeList.indexOf(theme) === -1)
+  },
+
   @observes("model.selectableComponents.[]", "selectableComponentsList")
   updateSelectableComponentsIds() {
     this.set("selectableComponentsIds", this.get("model.selectableComponents").map(t => t.get("id")))
+  },
+
+  @observes("activeComponentsIds", "selectableComponentsIds")
+  sdasd() {
+    console.log(this.get("activeComponentsIds.length"))
+    console.log(this.get("model.activeComponents.length"))
+
+    console.log(this.get("selectableComponentsIds.length"))
+    console.log(this.get("model.selectableComponents.length"))
   },
 
   @computed("model.component")
@@ -293,11 +303,11 @@ export default Ember.Controller.extend({
     },
 
     addComponent(selectable, id) {
-      this.get("model").addComponent(this.get("allThemes").find(t => t.get("id") === id), selectable)
+      //this.get("model").addComponent(this.get("allThemes").find(t => t.get("id") === id), selectable)
     },
 
     removeComponent(selectable, id) {
-      this.get("model").removeComponent(this.get("allThemes").find(t => t.get("id") === id), selectable)
+      //this.get("model").removeComponent(this.get("allThemes").find(t => t.get("id") === id), selectable)
     },
 
     switchType() {

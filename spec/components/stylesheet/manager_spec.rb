@@ -59,6 +59,33 @@ describe Stylesheet::Manager do
     expect(new_link).to include("/stylesheets/desktop_theme_#{theme.id}_")
   end
 
+  it "uses the scheme of the parent theme when generating CSS for the parent's selectable components" do
+    scheme = ColorScheme.create!(name: "Test Scheme")
+    ColorSchemeRevisor.revise(scheme, colors: [
+      { name: "primary", hex: "9dc927", default_hex: "949493" },
+      { name: "danger", hex: "a2b29b", default_hex: "ad73d7" }
+    ])
+    parent = Fabricate(:theme, color_scheme: scheme)
+    child = Fabricate(:theme, component: true)
+    parent.add_child_theme!(child, selectable: true)
+    parent.set_field(target: :common, name: "scss", value: ".parent{color: $danger;}")
+    parent.save!
+
+    child.set_field(target: :common, name: "scss", value: ".child{color: $primary;}")
+    child.save!
+
+    results = Stylesheet::Manager.stylesheet_data(:desktop_theme, [parent.id, child.id])
+
+    parent_path = results.find { |hash| hash[:theme_id] == parent.id }[:new_href].gsub(/\?.*/, "").split("/").last
+    child_path = results.find { |hash| hash[:theme_id] == child.id }[:new_href].gsub(/\?.*/, "").split("/").last
+
+    parent_css = File.read(File.join(Rails.root, Stylesheet::Manager::CACHE_PATH, parent_path))
+    child_css = File.read(File.join(Rails.root, Stylesheet::Manager::CACHE_PATH, child_path))
+
+    expect(parent_css).to include(".parent{color:#a2b29b}")
+    expect(child_css).to include(".child{color:#9dc927}")
+  end
+
   describe 'digest' do
     after do
       DiscoursePluginRegistry.stylesheets.delete "fake_file"

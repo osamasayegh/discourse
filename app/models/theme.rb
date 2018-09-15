@@ -22,10 +22,6 @@ class Theme < ActiveRecord::Base
 
   validate :component_validations
 
-  scope :user_selectable, ->() {
-    where("NOT component AND (user_selectable OR id = ?)", SiteSetting.default_theme_id)
-  }
-
   def notify_color_change(color)
     changed_colors << color
   end

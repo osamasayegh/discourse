@@ -56,6 +56,7 @@ class SiteSerializer < ApplicationSerializer
         .joins("JOIN themes t2 ON ct.parent_theme_id = t2.id")
         .where("ct.user_selectable")
         .where("t2.user_selectable OR t2.id = ?", SiteSetting.default_theme_id)
+        .order(:name)
         .pluck("themes.id", :name, :parent_theme_id)
         .map { |id, n, p| { id: id, name: n, parent_id: p } }
         .as_json
