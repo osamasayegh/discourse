@@ -4,6 +4,17 @@
   <div class="controls">
     {{combo-box content=userSelectableThemes value=themeId}}
   </div>
+  {{#if hasComponents}}
+    <label class="components-label">{{I18n "user.components"}}</label>
+    <div class="components">
+      {{#each availableComponents as |component|}}
+        <div class="component">
+          {{input checked=component.checked type="checkbox"}}
+          {{component.name}}
+        </div>
+      {{/each}}
+    </div>
+  {{/if}}
   <div class="controls">
     {{preference-checkbox labelKey="user.theme_default_on_all_devices" checked=makeThemeDefault}}
   </div>
@@ -21,7 +32,6 @@
     </div>
   </div>
 {{/if}}
-
 
 <div class="control-group home">
   <label class="control-label">{{i18n 'user.home'}}</label>

@@ -26,7 +26,9 @@ export default Ember.Route.extend({
       parentController: parentController,
       allThemes: parentController.get("model"),
       colorSchemeId: model.get("color_scheme_id"),
-      colorSchemes: parentController.get("model.extras.color_schemes")
+      colorSchemes: parentController.get("model.extras.color_schemes"),
+      addedComponents: [],
+      removedComponents: []
     });
 
     this.handleHighlight(model);
@@ -46,6 +48,10 @@ export default Ember.Route.extend({
   },
 
   actions: {
+    willTransition() {
+      this.controller.discardComponentsChanges();
+    },
+
     didTransition() {
       scrollTop();
     }

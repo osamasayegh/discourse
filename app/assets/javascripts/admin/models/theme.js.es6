@@ -14,6 +14,20 @@ const Theme = RestModel.extend({
   isPendingUpdates: Em.computed.gt("remote_theme.commits_behind", 0),
   hasEditedFields: Em.computed.gt("editedFields.length", 0),
 
+  initialize(component) {
+    if (component) {
+      this.setProperties({
+        component: true,
+        parentThemes: []
+      });
+    } else {
+      this.setProperties({
+        component: false,
+        allComponents: []
+      });
+    }
+  },
+
   @computed("theme_fields")
   themeFields(fields) {
     if (!fields) {
@@ -76,6 +90,30 @@ const Theme = RestModel.extend({
     }
   },
 
+  switchType(newType) {
+    let updatedProps = {
+      default: false,
+      color_scheme_id: null,
+      user_selectable: false
+    };
+    if (newType) {
+      Object.assign(updatedProps, {
+        allComponents: null,
+        child_themes: null,
+        parentThemes: [],
+        component: true
+      });
+    } else {
+      Object.assign(updatedProps, {
+        allComponents: [],
+        child_themes: [],
+        parentThemes: null,
+        component: false
+      });
+    }
+    this.setProperties(updatedProps);
+  },
+
   getError(target, name) {
     let themeFields = this.get("themeFields");
     let key = this.getKey({ target, name });
@@ -130,32 +168,66 @@ const Theme = RestModel.extend({
     }
   },
 
-  @computed("childThemes.@each")
-  child_theme_ids(childThemes) {
-    if (childThemes) {
-      return childThemes.map(theme => Ember.get(theme, "id"));
+  @computed("allComponents.[]", "child_themes.[]")
+  activeComponents(components, raw) {
+    const active = this.get("child_themes")
+      .filter(c => !c.selectable)
+      .map(c => c.id);
+    return components.filter(component => active.includes(component.get("id")));
+  },
+
+  @computed("allComponents.[]", "child_themes.[]")
+  selectableComponents(components, raw) {
+    const selectable = this.get("child_themes")
+      .filter(c => c.selectable)
+      .map(c => c.id);
+    return components.filter(component =>
+      selectable.includes(component.get("id"))
+    );
+  },
+
+  removeComponent(component) {
+    const list = this.get("allComponents");
+    list.removeObject(component);
+    const child = this.get("child_themes").find(
+      c => c.id === component.get("id")
+    );
+    this.get("child_themes").removeObject(child);
+    const parents = component.get("parentThemes");
+    if (parents) {
+      parents.removeObject(this);
     }
   },
 
-  removeChildTheme(theme) {
-    const childThemes = this.get("childThemes");
-    childThemes.removeObject(theme);
-    return this.saveChanges("child_theme_ids");
+  addComponent(component, selectable) {
+    const child = this.get("child_themes").find(
+      c => c.id === component.get("id")
+    );
+    if (child) {
+      this.get("child_themes").removeObject(child);
+    }
+    this.get("child_themes").pushObject({
+      id: component.get("id"),
+      name: component.get("name"),
+      selectable
+    });
+    const list = this.get("allComponents");
+    list.removeObject(component);
+    list.pushObject(component);
+    component.get("parentThemes").pushObject(this);
   },
 
-  addChildTheme(theme) {
-    let childThemes = this.get("childThemes");
-    if (!childThemes) {
-      childThemes = [];
-      this.set("childThemes", childThemes);
-    }
-    childThemes.removeObject(theme);
-    childThemes.pushObject(theme);
-    return this.saveChanges("child_theme_ids");
+  saveComponents(added, removed) {
+    const hash = {
+      removed: removed.map(c => c.id),
+      added_selectable: added.filter(c => c.selectable).map(c => c.id),
+      added_active: added.filter(c => !c.selectable).map(c => c.id)
+    };
+    return this.save({ components_changes: hash }).catch(popupAjaxError);
   },
 
   @computed("name", "default")
-  description: function(name, isDefault) {
+  description(name, isDefault) {
     if (isDefault) {
       return I18n.t("admin.customize.theme.default_name", { name: name });
     } else {

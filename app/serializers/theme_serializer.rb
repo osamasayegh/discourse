@@ -32,18 +32,6 @@ class ThemeFieldSerializer < ApplicationSerializer
   end
 end
 
-class ChildThemeSerializer < ApplicationSerializer
-  attributes :id, :name, :created_at, :updated_at, :default, :component
-
-  def include_default?
-    object.id == SiteSetting.default_theme_id
-  end
-
-  def default
-    true
-  end
-end
-
 class RemoteThemeSerializer < ApplicationSerializer
   attributes :id, :remote_url, :remote_version, :local_version, :about_url,
              :license_url, :commits_behind, :remote_updated_at, :updated_at,
@@ -60,13 +48,13 @@ class RemoteThemeSerializer < ApplicationSerializer
   end
 end
 
-class ThemeSerializer < ChildThemeSerializer
-  attributes :color_scheme, :color_scheme_id, :user_selectable, :remote_theme_id, :settings, :errors
-
-  has_one :user, serializer: UserNameSerializer, embed: :object
+class ThemeSerializer < ApplicationSerializer
+  attributes :id, :name, :created_at, :updated_at, :color_scheme, :color_scheme_id, :component,
+             :user_selectable, :remote_theme_id, :settings, :default, :child_themes, :errors
 
   has_many :theme_fields, serializer: ThemeFieldSerializer, embed: :objects
-  has_many :child_themes, serializer: ChildThemeSerializer, embed: :objects
+
+  has_one :user, serializer: UserNameSerializer, embed: :object
   has_one :remote_theme, serializer: RemoteThemeSerializer, embed: :objects
 
   def initialize(theme, options = {})
@@ -74,8 +62,19 @@ class ThemeSerializer < ChildThemeSerializer
     @errors = []
   end
 
+  def include_default?
+    object.id == SiteSetting.default_theme_id
+  end
+
+  def default
+    true
+  end
+
   def child_themes
-    object.child_themes.order(:name)
+    selectable_components = object.components_ids(selectable: true)
+    object.child_themes.order(:name).pluck(:id, :name).map do |id, name|
+      { id: id, name: name, selectable: selectable_components.include?(id) }
+    end
   end
 
   def settings
@@ -123,6 +122,10 @@ class ThemeWithEmbeddedUploadsSerializer < ThemeSerializer
   has_many :theme_fields, serializer: ThemeFieldWithEmbeddedUploadsSerializer, embed: :objects
 
   def include_settings?
+    false
+  end
+
+  def include_child_themes?
     false
   end
 end

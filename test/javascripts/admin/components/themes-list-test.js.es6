@@ -7,7 +7,7 @@ const themes = [1, 2, 3, 4, 5].map(num =>
   Theme.create({ name: `Theme ${num}` })
 );
 const components = [1, 2, 3, 4, 5].map(num =>
-  Theme.create({ name: `Child ${num}`, component: true })
+  Theme.create({ name: `Child ${num}`, component: true, parentThemes: [] })
 );
 
 componentTest("current tab is themes", {
@@ -43,7 +43,7 @@ componentTest("current tab is themes", {
     [2, 3].forEach(num => themes[num].set("user_selectable", true));
     themes[4].set("default", true);
     this.set("themes", themes);
-    const names = [4, 2, 3, 0, 1].map(num => themes[num].get("name")); // default theme always on top, followed by user-selectable ones and then the rest
+    const names = [4, 2, 3, 0, 1].map(num => themes[num].get("name")); // default theme always on top, followed by the user-selectable ones and then the rest
     assert.deepEqual(
       Array.from(this.$(".themes-list-item").find(".name")).map(node =>
         node.innerText.trim()
@@ -107,12 +107,39 @@ componentTest("current tab is components", {
     assert.equal(
       this.$(".inactive-indicator").index(),
       -1,
-      "there is no separator"
+      "there is no separator when all components are inactive (with no parents)"
     );
     assert.equal(
       this.$(".themes-list-item").length,
       5,
       "displays all components"
+    );
+
+    const parents = [themes[1], themes[2]];
+    [2, 3].forEach(num => components[num].set("parentThemes", parents));
+    this.set("components", components);
+
+    assert.equal(
+      this.$(".inactive-indicator").index(),
+      2,
+      "there is a separator when there active and inactive components"
+    );
+
+    assert.deepEqual(
+      Array.from(this.$(".themes-list-item").find(".name")).map(node =>
+        node.innerText.trim()
+      ),
+      [2, 3, 0, 1, 4].map(n => components[n].get("name")),
+      "active components are always on top of the list"
+    );
+
+    components.forEach(c => c.set("parentThemes", parents));
+    this.set("components", components);
+
+    assert.equal(
+      this.$(".inactive-indicator").index(),
+      -1,
+      "there is no separator when all components are active (all have parents)"
     );
 
     this.set("components", []);

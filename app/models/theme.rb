@@ -22,10 +22,6 @@ class Theme < ActiveRecord::Base
 
   validate :component_validations
 
-  scope :user_selectable, ->() {
-    where('user_selectable OR id = ?', SiteSetting.default_theme_id)
-  }
-
   def notify_color_change(color)
     changed_colors << color
   end
@@ -95,13 +91,14 @@ class Theme < ActiveRecord::Base
 
   def self.user_theme_ids
     get_set_cache "user_theme_ids" do
-      Theme.user_selectable.pluck(:id)
+      Theme.where("NOT component AND (user_selectable OR id = ?)", SiteSetting.default_theme_id).pluck(:id)
     end
   end
 
-  def self.components_for(theme_id)
-    get_set_cache "theme_components_for_#{theme_id}" do
-      ChildTheme.where(parent_theme_id: theme_id).distinct.pluck(:child_theme_id)
+  def self.components_for(theme_id, selectable: false)
+    key = selectable ? "theme_selectable_components_for_#{theme_id}" : "theme_components_for_#{theme_id}"
+    get_set_cache key do
+      ChildTheme.where(parent_theme_id: theme_id, user_selectable: selectable).distinct.pluck(:child_theme_id)
     end
   end
 
@@ -109,6 +106,7 @@ class Theme < ActiveRecord::Base
     Site.clear_anon_cache!
     clear_cache!
     ApplicationSerializer.expire_cache_fragment!("user_themes")
+    ApplicationSerializer.expire_cache_fragment!("user_components")
   end
 
   def self.clear_default!
@@ -123,7 +121,7 @@ class Theme < ActiveRecord::Base
     parent = ids.first
 
     components = ids[1..-1]
-    components.push(*components_for(parent)) if extend
+    components.push(*components_for(parent, selectable: false)) if extend
     components.sort!.uniq!
 
     [parent, *components]
@@ -141,6 +139,10 @@ class Theme < ActiveRecord::Base
 
   def default?
     SiteSetting.default_theme_id == id
+  end
+
+  def components_ids(selectable: false)
+    self.class.components_for(self.id, selectable: selectable)
   end
 
   def component_validations
@@ -207,7 +209,7 @@ class Theme < ActiveRecord::Base
     self.targets.invert[target_id]
   end
 
-  def self.notify_theme_change(theme_ids, with_scheme: false, clear_manager_cache: true, all_themes: false)
+  def self.notify_theme_change(theme_ids, with_scheme: false, clear_manager_cache: true)
     Stylesheet::Manager.clear_theme_cache!
     targets = [:mobile_theme, :desktop_theme]
 
@@ -216,18 +218,14 @@ class Theme < ActiveRecord::Base
       Stylesheet::Manager.cache.clear if clear_manager_cache
     end
 
-    if all_themes
-      message = theme_ids.map { |id| refresh_message_for_targets(targets, id) }.flatten
-    else
-      message = refresh_message_for_targets(targets, theme_ids).flatten
-    end
-
+    message = refresh_message_for_targets(targets, theme_ids).flatten
     MessageBus.publish('/file-change', message)
   end
 
-  def notify_theme_change(with_scheme: false)
+  def notify_theme_change(with_scheme: false, clear_manager_cache: true)
     theme_ids = (dependant_themes&.pluck(:id) || []).unshift(self.id)
-    self.class.notify_theme_change(theme_ids, with_scheme: with_scheme)
+    theme_ids.push(*components_ids(selectable: true)) if with_scheme
+    self.class.notify_theme_change(theme_ids, with_scheme: with_scheme, clear_manager_cache: clear_manager_cache)
   end
 
   def self.refresh_message_for_targets(targets, theme_ids)
@@ -257,7 +255,7 @@ class Theme < ActiveRecord::Base
 
     return [] unless id
 
-    Theme.joins("JOIN child_themes ON themes.id = child_themes.#{join_field}").where("#{where_field} = ?", id)
+    Theme.joins("JOIN child_themes ON themes.id = child_themes.#{join_field}").where("#{where_field} = ? AND NOT child_themes.user_selectable", id)
   end
 
   def self.resolve_baked_field(theme_ids, target, name)
@@ -333,8 +331,8 @@ class Theme < ActiveRecord::Base
     fields.values
   end
 
-  def add_child_theme!(theme)
-    new_relation = child_theme_relation.new(child_theme_id: theme.id)
+  def add_child_theme!(theme, selectable: false)
+    new_relation = child_theme_relation.new(child_theme_id: theme.id, user_selectable: selectable)
     if new_relation.save
       @included_themes = nil
       child_themes.reload
@@ -342,6 +340,15 @@ class Theme < ActiveRecord::Base
     else
       raise Discourse::InvalidParameters.new(new_relation.errors.full_messages.join(", "))
     end
+  end
+
+  def change_child_type!(child, selectable:) # child here is an instance of ChildTheme
+    return if child.user_selectable == selectable
+    child.user_selectable = selectable
+    child.save!
+    @included_themes = nil
+    child_themes.reload
+    save!
   end
 
   def settings

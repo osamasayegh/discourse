@@ -11,7 +11,7 @@ export default Ember.Component.extend({
   classNameBindings: ["theme.selected:selected"],
   hasComponents: Em.computed.gt("children.length", 0),
   displayComponents: Em.computed.and("hasComponents", "theme.isActive"),
-  displayHasMore: Em.computed.gt("theme.childThemes.length", MAX_COMPONENTS),
+  displayHasMore: Em.computed.gt("theme.allComponents.length", MAX_COMPONENTS),
 
   click(e) {
     if (!$(e.target).hasClass("others-count")) {
@@ -51,13 +51,13 @@ export default Ember.Component.extend({
 
   @computed(
     "theme.component",
-    "theme.childThemes.@each.name",
-    "theme.childThemes.length",
+    "theme.allComponents.@each.name",
+    "theme.allComponents.length",
     "childrenExpanded"
   )
   children() {
     const theme = this.get("theme");
-    let children = theme.get("childThemes");
+    let children = theme.get("allComponents");
     if (theme.get("component") || !children) {
       return [];
     }
@@ -68,7 +68,7 @@ export default Ember.Component.extend({
   },
 
   @computed(
-    "theme.childThemes.length",
+    "theme.allComponents.length",
     "theme.component",
     "childrenExpanded",
     "children.length"

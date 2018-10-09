@@ -1,9 +1,13 @@
-import { default as computed } from "ember-addons/ember-computed-decorators";
+import {
+  default as computed,
+  observes
+} from "ember-addons/ember-computed-decorators";
 import { url } from "discourse/lib/computed";
 import { popupAjaxError } from "discourse/lib/ajax-error";
 import showModal from "discourse/lib/show-modal";
 import ThemeSettings from "admin/models/theme-settings";
 import { THEMES, COMPONENTS } from "admin/models/theme";
+import { escapeExpression } from "discourse/lib/utilities";
 
 const THEME_UPLOAD_VAR = 2;
 
@@ -18,7 +22,7 @@ export default Ember.Controller.extend({
       return null;
     }
     const parents = allThemes.filter(theme =>
-      _.contains(theme.get("childThemes"), model)
+      _.contains(theme.get("allComponents"), model)
     );
     return parents.length === 0 ? null : parents;
   },
@@ -47,22 +51,40 @@ export default Ember.Controller.extend({
     return colorSchemeId !== existingId;
   },
 
-  @computed("availableChildThemes", "model.childThemes.@each", "model")
-  selectableChildThemes(available, childThemes) {
-    if (available) {
-      const themes = !childThemes
-        ? available
-        : available.filter(theme => childThemes.indexOf(theme) === -1);
-      return themes.length === 0 ? null : themes;
+  @computed("allThemes", "model.component", "model.allComponents", "model")
+  availableComponents(allThemes, component, allComponents) {
+    if (!component) {
+      const themeId = this.get("model.id");
+      return allThemes.filter(theme => theme.get("component"));
     }
   },
 
-  @computed("allThemes", "model.component", "model")
-  availableChildThemes(allThemes) {
+  @computed("availableComponents.[]", "model.selectableComponents.[]")
+  activeComponentsList(available, selectableList) {
+    return available.filter(theme => selectableList.indexOf(theme) === -1);
+  },
+
+  @computed("availableComponents.[]", "model.activeComponents.[]")
+  selectableComponentsList(available, activeList) {
+    return available.filter(theme => activeList.indexOf(theme) === -1);
+  },
+
+  @observes("model.activeComponents.[]", "activeComponentsList")
+  updateActiveComponentsIds() {
     if (!this.get("model.component")) {
-      const themeId = this.get("model.id");
-      return allThemes.filter(
-        theme => theme.get("id") !== themeId && theme.get("component")
+      this.set(
+        "activeComponentsIds",
+        this.get("model.activeComponents").map(t => t.get("id"))
+      );
+    }
+  },
+
+  @observes("model.selectableComponents.[]", "selectableComponentsList")
+  updateSelectableComponentsIds() {
+    if (!this.get("model.component")) {
+      this.set(
+        "selectableComponentsIds",
+        this.get("model.selectableComponents").map(t => t.get("id"))
       );
     }
   },
@@ -86,17 +108,24 @@ export default Ember.Controller.extend({
 
   @computed("model.settings")
   settings(settings) {
-    return settings.map(setting => ThemeSettings.create(setting));
+    if (settings) {
+      return settings.map(setting => ThemeSettings.create(setting));
+    }
   },
 
   @computed("settings")
   hasSettings(settings) {
-    return settings.length > 0;
+    return settings && settings.length > 0;
   },
 
   @computed("model.remoteError", "updatingRemote")
   showRemoteError(errorMessage, updating) {
     return errorMessage && !updating;
+  },
+
+  @computed("addedComponents.length", "removedComponents.length")
+  hasEditedComponents(added, removed) {
+    return added > 0 || removed > 0;
   },
 
   editedFieldsForTarget(target) {
@@ -108,7 +137,8 @@ export default Ember.Controller.extend({
   commitSwitchType() {
     const model = this.get("model");
     const newValue = !model.get("component");
-    model.set("component", newValue);
+    model.switchType(newValue);
+    this.set("colorSchemeId", null);
 
     if (newValue) {
       this.set("parentController.currentTab", COMPONENTS);
@@ -116,35 +146,46 @@ export default Ember.Controller.extend({
       this.set("parentController.currentTab", THEMES);
     }
 
-    model
-      .saveChanges("component")
-      .then(() => {
-        this.set("colorSchemeId", null);
-
-        model.setProperties({
-          default: false,
-          color_scheme_id: null,
-          user_selectable: false,
-          child_themes: [],
-          childThemes: []
-        });
-
-        this.get("parentController.model.content").forEach(theme => {
-          const children = _.toArray(theme.get("childThemes"));
-          const rawChildren = _.toArray(theme.get("child_themes") || []);
-          const index = children ? children.indexOf(model) : -1;
-          if (index > -1) {
-            children.splice(index, 1);
-            rawChildren.splice(index, 1);
-            theme.setProperties({
-              childThemes: children,
-              child_themes: rawChildren
-            });
-          }
-        });
-      })
-      .catch(popupAjaxError);
+    model.saveChanges("component").then(() => {
+      if (newValue) {
+        this.get("allThemes")
+          .filter(t => t.get("component"))
+          .forEach(th => {
+            const parents = th.get("parentThemes");
+            if (parents.includes(model)) {
+              parents.removeObject(model);
+            }
+          });
+      } else {
+        this.get("allThemes")
+          .filter(t => !t.get("component"))
+          .forEach(th => {
+            if (th.get("allComponents").includes(model)) {
+              th.removeComponent(model);
+            }
+          });
+      }
+    });
   },
+
+  discardComponentsChanges() {
+    this.get("addedComponents").forEach(added => {
+      this.get("model").removeComponent(
+        this.get("allThemes").find(t => t.get("id") === added.id)
+      );
+    });
+    this.get("removedComponents").forEach(removed => {
+      this.get("model").addComponent(
+        this.get("allThemes").find(t => t.get("id") === removed.id),
+        removed.selectable
+      );
+    });
+    this.setProperties({
+      addedComponents: [],
+      removedComponents: []
+    });
+  },
+
   transitionToEditRoute() {
     this.transitionToRoute(
       "adminCustomizeThemes.edit",
@@ -240,12 +281,6 @@ export default Ember.Controller.extend({
       this.get("model").saveChanges("user_selectable");
     },
 
-    addChildTheme() {
-      let themeId = parseInt(this.get("selectedChildThemeId"));
-      let theme = this.get("allThemes").findBy("id", themeId);
-      this.get("model").addChildTheme(theme);
-    },
-
     removeUpload(upload) {
       return bootbox.confirm(
         I18n.t("admin.customize.theme.delete_upload_confirm"),
@@ -257,10 +292,6 @@ export default Ember.Controller.extend({
           }
         }
       );
-    },
-
-    removeChildTheme(theme) {
-      this.get("model").removeChildTheme(theme);
     },
 
     destroy() {
@@ -280,12 +311,61 @@ export default Ember.Controller.extend({
       );
     },
 
+    addComponent(selectable, id) {
+      const obj = this.get("removedComponents").find(
+        c => c.id === id && c.selectable === selectable
+      );
+      if (obj) {
+        this.get("removedComponents").removeObject(obj);
+      } else {
+        this.get("addedComponents").pushObject({ id, selectable });
+      }
+      this.get("model").addComponent(
+        this.get("allThemes").find(t => t.get("id") === id),
+        selectable
+      );
+    },
+
+    removeComponent(selectable, id) {
+      const obj = this.get("addedComponents").find(
+        c => c.id === id && c.selectable === selectable
+      );
+      if (obj) {
+        this.get("addedComponents").removeObject(obj);
+      } else {
+        this.get("removedComponents").pushObject({ id, selectable });
+      }
+      this.get("model").removeComponent(
+        this.get("allThemes").find(t => t.get("id") === id)
+      );
+    },
+
+    saveComponents() {
+      return this.get("model")
+        .saveComponents(
+          this.get("addedComponents"),
+          this.get("removedComponents")
+        )
+        .then(() => {
+          this.setProperties({
+            addedComponents: [],
+            removedComponents: []
+          });
+        });
+    },
+
+    cancelComponentsChanges() {
+      this.discardComponentsChanges();
+    },
+
     switchType() {
       const relatives = this.get("model.component")
         ? this.get("parentThemes")
-        : this.get("model.childThemes");
+        : this.get("model.allComponents");
       if (relatives && relatives.length > 0) {
-        const names = relatives.map(relative => relative.get("name"));
+        const names = relatives.map(relative =>
+          escapeExpression(relative.get("name"))
+        );
         bootbox.confirm(
           I18n.t(`${this.get("convertKey")}_alert`, {
             relatives: names.join(", ")

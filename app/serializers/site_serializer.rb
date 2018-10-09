@@ -28,6 +28,7 @@ class SiteSerializer < ApplicationSerializer
     :wizard_required,
     :topic_featured_link_allowed_category_ids,
     :user_themes,
+    :user_components,
     :censored_words,
     :shared_drafts_category_id
   )
@@ -45,6 +46,19 @@ class SiteSerializer < ApplicationSerializer
         .order(:name)
         .pluck(:id, :name)
         .map { |id, n| { theme_id: id, name: n, default: id == SiteSetting.default_theme_id } }
+        .as_json
+    end
+  end
+
+  def user_components
+    cache_fragment("user_components") do
+      Theme.joins("JOIN child_themes ct ON themes.id = ct.child_theme_id")
+        .joins("JOIN themes t2 ON ct.parent_theme_id = t2.id")
+        .where("ct.user_selectable")
+        .where("t2.user_selectable OR t2.id = ?", SiteSetting.default_theme_id)
+        .order(:name)
+        .pluck("themes.id", :name, :parent_theme_id)
+        .map { |id, n, p| { id: id, name: n, parent_id: p } }
         .as_json
     end
   end

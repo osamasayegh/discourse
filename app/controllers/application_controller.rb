@@ -386,7 +386,7 @@ class ApplicationController < ActionController::Base
 
     if preview_theme_id = request[:preview_theme_id]&.to_i
       ids = [preview_theme_id]
-      theme_ids = ids if guardian.allow_themes?(ids, include_preview: true)
+      theme_ids = guardian.filter_unallowed_themes(ids, include_preview: true)
     end
 
     user_option = current_user&.user_option
@@ -395,13 +395,13 @@ class ApplicationController < ActionController::Base
       ids, seq = cookies[:theme_ids]&.split("|")
       ids = ids&.split(",")&.map(&:to_i)
       if ids.present? && seq && seq.to_i == user_option&.theme_key_seq.to_i
-        theme_ids = ids if guardian.allow_themes?(ids)
+        theme_ids = guardian.filter_unallowed_themes(ids)
       end
     end
 
     if theme_ids.blank?
       ids = user_option&.theme_ids || []
-      theme_ids = ids if guardian.allow_themes?(ids)
+      theme_ids = guardian.filter_unallowed_themes(ids)
     end
 
     if theme_ids.blank? && SiteSetting.default_theme_id != -1

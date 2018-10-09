@@ -44,6 +44,7 @@ class Stylesheet::Manager
     theme_ids = [theme_ids] unless Array === theme_ids
     theme_ids = [theme_ids.first] unless target =~ THEME_REGEX
     theme_ids = Theme.transform_ids(theme_ids, extend: false)
+    scheme = Theme.find_by(id: theme_ids.first)&.color_scheme
 
     current_hostname = Discourse.current_hostname
 
@@ -56,10 +57,11 @@ class Stylesheet::Manager
       theme_ids.each do |theme_id|
         data = { target: target }
         cache_key = "path_#{target}_#{theme_id}_#{current_hostname}"
+        cache_key += "_#{scheme.id}" if scheme
         href = cache[cache_key]
 
         unless href
-          builder = self.new(target, theme_id)
+          builder = self.new(target, theme_id, scheme: scheme)
           is_theme = builder.is_theme?
           has_theme = builder.theme.present?
 
@@ -83,18 +85,35 @@ class Stylesheet::Manager
   end
 
   def self.precompile_css
+    current_hostname = Discourse.current_hostname
     themes = Theme.where('user_selectable OR id = ?', SiteSetting.default_theme_id).pluck(:id, :name)
     themes << nil
     themes.each do |id, name|
+      theme_id = id || SiteSetting.default_theme_id
+      scheme = Theme.find_by(id: theme_id)&.color_scheme
+      selectable_components = Theme.where(id: Theme.components_for(theme_id, selectable: true)).pluck(:id, :name)
+
       [:desktop, :mobile, :desktop_rtl, :mobile_rtl, :desktop_theme, :mobile_theme, :admin].each do |target|
-        theme_id = id || SiteSetting.default_theme_id
         next if target =~ THEME_REGEX && theme_id == -1
-        cache_key = "#{target}_#{theme_id}"
+        cache_key = "path_#{target}_#{theme_id}_#{current_hostname}"
+        cache_key += "_#{scheme.id}" if scheme
 
         STDERR.puts "precompile target: #{target} #{name}"
         builder = self.new(target, theme_id)
         builder.compile(force: true)
         cache[cache_key] = nil
+
+        if target =~ THEME_REGEX && theme_id != -1
+          selectable_components.each do |child_id, child_name|
+            cache_key = "path_#{target}_#{child_id}_#{current_hostname}"
+            cache_key += "_#{scheme.id}" if scheme
+
+            STDERR.puts "precompile target: #{target} #{name}'s selectable component #{child_name}"
+            builder = self.new(target, child_id, scheme: scheme)
+            builder.compile(force: true)
+            cache[cache_key] = nil
+          end
+        end
       end
     end
     nil
@@ -133,9 +152,10 @@ class Stylesheet::Manager
     "#{Rails.root}/#{CACHE_PATH}"
   end
 
-  def initialize(target = :desktop, theme_id)
+  def initialize(target = :desktop, theme_id, scheme: nil)
     @target = target
     @theme_id = theme_id
+    @scheme = scheme
   end
 
   def compile(opts = {})
@@ -163,6 +183,7 @@ class Stylesheet::Manager
         @target,
          rtl: rtl,
          theme_id: theme&.id,
+         scheme: @scheme,
          source_map_file: source_map_filename
       )
     rescue SassC::SyntaxError => e
@@ -323,8 +344,7 @@ class Stylesheet::Manager
   end
 
   def color_scheme_digest
-
-    cs = theme&.color_scheme
+    cs = @scheme || theme&.color_scheme
     category_updated = Category.where("uploaded_background_id IS NOT NULL").pluck(:updated_at).map(&:to_i).sum
 
     if cs || category_updated > 0

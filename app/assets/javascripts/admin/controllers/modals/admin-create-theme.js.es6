@@ -52,6 +52,7 @@ export default Ember.Controller.extend(ModalFunctionality, {
 
       this.set("saving", true);
       const theme = this.store.createRecord("theme");
+      theme.initialize(this.get("component"));
       theme
         .save({ name: this.get("name"), component: this.get("component") })
         .then(() => {

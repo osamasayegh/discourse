@@ -144,6 +144,35 @@
       margin-bottom: 10px;
     }
 
+    .blocks-wrapper {
+      width: 85%;
+      vertical-align: middle;
+      display: inline-block;
+    }
+    .components-block {
+      margin-top: 10px;
+      margin-bottom: 20px;
+    }
+    .components-block:last-child {
+      margin-bottom: 0;
+    }
+    .components-body {
+      display: inline-block;
+      width: 76%;
+      .help {
+        margin-top: 3px;
+        font-size: $font-down-1;
+        color: $primary-medium;
+      }
+    }
+    .components-label {
+      width: 20%;
+      display: inline-block;
+      vertical-align: top;
+    }
+    .components-buttons {
+      vertical-align: middle;
+    }
     .title {
       font-size: $font-up-4;
       font-weight: bold;
@@ -169,9 +198,6 @@
     .description {
       margin-bottom: 12px;
     }
-  }
-  .add-component-button {
-    vertical-align: middle;
   }
   .themes-intro {
     display: inline-block;

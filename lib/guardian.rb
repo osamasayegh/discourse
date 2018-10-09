@@ -365,18 +365,21 @@ class Guardian
     UserExport.where(user_id: @user.id, created_at: (Time.zone.now.beginning_of_day..Time.zone.now.end_of_day)).count == 0
   end
 
-  def allow_themes?(theme_ids, include_preview: false)
-    return true if theme_ids.blank?
+  def filter_unallowed_themes(theme_ids, include_preview: false)
+    return [] if theme_ids.blank?
+    theme_ids.compact!
 
     if include_preview && is_staff? && (theme_ids - Theme.theme_ids).blank?
-      return true
+      return theme_ids
     end
 
-    parent = theme_ids.first
-    components = theme_ids[1..-1] || []
+    parent = theme_ids[0]
+    return [] unless Theme.user_theme_ids.include?(parent)
 
-    Theme.user_theme_ids.include?(parent) &&
-      (components - Theme.components_for(parent)).empty?
+    components = theme_ids[1..-1] || []
+    parent_components = Theme.components_for(parent, selectable: true)
+    allowed_components = components & parent_components
+    [parent, *allowed_components]
   end
 
   private

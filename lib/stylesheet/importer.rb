@@ -35,8 +35,9 @@ module Stylesheet
 
     register_import "theme_variables" do
       contents = ""
-      colors = (@theme_id && theme.color_scheme) ? theme.color_scheme.resolved_colors : ColorScheme.base_colors
-      colors.each do |n, hex|
+      @scheme ||= theme&.color_scheme
+      @colors ||= @scheme&.resolved_colors || ColorScheme.base_colors
+      @colors.each do |n, hex|
         contents << "$#{n}: ##{hex} !default;\n"
       end
 
@@ -93,6 +94,7 @@ module Stylesheet
         # make up an id so other stuff does not bail out
         @theme_id = @theme.id || -1
       end
+      @scheme = options[:scheme]
     end
 
     def import_files(files)

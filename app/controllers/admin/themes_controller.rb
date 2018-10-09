@@ -142,19 +142,15 @@ class Admin::ThemesController < Admin::AdminController
       end
     end
 
-    if theme_params.key?(:child_theme_ids)
-      expected = theme_params[:child_theme_ids].map(&:to_i)
+    if theme_params.key?(:components_changes)
+      hash = theme_params[:components_changes].to_h.symbolize_keys
+      hash.keys.each { |key| hash[key].map!(&:to_i) }
 
-      @theme.child_theme_relation.to_a.each do |child|
-        if expected.include?(child.child_theme_id)
-          expected.reject! { |id| id == child.child_theme_id }
-        else
-          child.destroy
+      Theme.transaction do
+        @theme.child_theme_relation.where(child_theme_id: hash[:removed]).destroy_all
+        Theme.where(id: [*hash[:added_selectable], *hash[:added_active]]).each do |child|
+          @theme.add_child_theme!(child, selectable: hash[:added_selectable].include?(child.id))
         end
-      end
-
-      Theme.where(id: expected).each do |theme|
-        @theme.add_child_theme!(theme)
       end
     end
 
@@ -240,9 +236,6 @@ class Admin::ThemesController < Admin::AdminController
   def theme_params
     @theme_params ||=
       begin
-        # deep munge is a train wreck, work around it for now
-        params[:theme][:child_theme_ids] ||= [] if params[:theme].key?(:child_theme_ids)
-
         params.require(:theme).permit(
           :name,
           :color_scheme_id,
@@ -251,7 +244,7 @@ class Admin::ThemesController < Admin::AdminController
           :component,
           settings: {},
           theme_fields: [:name, :target, :value, :upload_id, :type_id],
-          child_theme_ids: []
+          components_changes: {}
         )
       end
   end

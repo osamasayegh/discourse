@@ -243,15 +243,9 @@ class ColorScheme < ActiveRecord::Base
 
   def publish_discourse_stylesheet
     if self.id
-      theme_ids = Theme.where(color_scheme_id: self.id).pluck(:id)
-      if theme_ids.present?
-        Stylesheet::Manager.cache.clear
-        Theme.notify_theme_change(
-          theme_ids,
-          with_scheme: true,
-          clear_manager_cache: false,
-          all_themes: true
-        )
+      Stylesheet::Manager.cache.clear
+      Theme.where(color_scheme_id: self.id).to_a.each do |theme|
+        theme.notify_theme_change(with_scheme: true, clear_manager_cache: false)
       end
     end
   end

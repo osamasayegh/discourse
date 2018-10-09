@@ -42,6 +42,7 @@ module Stylesheet
                                  source_map_contents: true,
                                  theme_id: options[:theme_id],
                                  theme: options[:theme],
+                                 scheme: options[:scheme],
                                  theme_field: options[:theme_field],
                                  load_paths: [ASSET_ROOT])
 

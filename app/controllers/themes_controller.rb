@@ -5,7 +5,8 @@ class ThemesController < ::ApplicationController
     if params[:ids] == "default"
       theme_ids = nil
     else
-      raise Discourse::NotFound unless guardian.allow_themes?(theme_ids)
+      theme_ids = guardian.filter_unallowed_themes(theme_ids)
+      raise Discourse::NotFound if theme_ids.blank?
     end
 
     targets = view_context.mobile_view? ? [:mobile, :mobile_theme] : [:desktop, :desktop_theme]

@@ -169,13 +169,10 @@ describe Admin::ThemesController do
       theme.set_field(target: :common, name: :scss, value: '.body{color: black;}')
       theme.save
 
-      child_theme = Fabricate(:theme, component: true)
-
       upload = Fabricate(:upload)
 
       put "/admin/themes/#{theme.id}.json", params: {
         theme: {
-          child_theme_ids: [child_theme.id],
           name: 'my test name',
           theme_fields: [
             { name: 'scss', target: 'common', value: '' },
@@ -195,8 +192,37 @@ describe Admin::ThemesController do
       expect(fields[0]["upload_id"]).to eq(upload.id)
       expect(fields[1]["value"]).to eq('body{color: blue;}')
       expect(fields.length).to eq(2)
-      expect(json["theme"]["child_themes"].length).to eq(1)
+
       expect(UserHistory.where(action: UserHistory.actions[:change_theme]).count).to eq(1)
+    end
+
+    it "correctly update theme's components" do
+      removed = Fabricate(:theme, component: true)
+      changed_to_active = Fabricate(:theme, component: true)
+      not_removed = Fabricate(:theme, component: true)
+      added_selectable = Fabricate(:theme, component: true)
+      added_active = Fabricate(:theme, component: true)
+
+      theme.add_child_theme!(removed)
+      theme.add_child_theme!(changed_to_active, selectable: true)
+      theme.add_child_theme!(not_removed)
+
+      put "/admin/themes/#{theme.id}.json", params: {
+        theme: {
+          components_changes: {
+            removed: [removed.id, changed_to_active.id],
+            added_selectable: [added_selectable.id],
+            added_active: [added_active.id, changed_to_active.id]
+          }
+        }
+      }
+
+      selectable = theme.components_ids(selectable: true)
+      active = theme.components_ids(selectable: false)
+
+      expect([*active, *selectable].size).to eq(4)
+      expect(selectable).to contain_exactly(added_selectable.id)
+      expect(active).to contain_exactly(not_removed.id, added_active.id, changed_to_active.id)
     end
 
     it 'returns the right error message' do
